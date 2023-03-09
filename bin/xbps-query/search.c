@@ -43,6 +43,16 @@
 #include <xbps.h>
 #include "defs.h"
 
+typedef struct {
+	bool regex, repo_mode;
+	regex_t regexp;
+	unsigned int maxcols;
+	const char *pat, *prop, *repourl;
+	xbps_array_t results;
+	char *linebuf;
+} search_data, TSEARCH_DATA;
+
+/*
 struct search_data {
 	bool regex, repo_mode;
 	regex_t regexp;
@@ -51,9 +61,11 @@ struct search_data {
 	xbps_array_t results;
 	char *linebuf;
 };
+*/
 
 static void
-print_results(struct xbps_handle *xhp, struct search_data *sd)
+//print_results(struct xbps_handle *xhp, struct search_data *sd)
+print_results(struct xbps_handle *xhp, TSEARCH_DATA *sd)
 {
 	const char *pkgver = NULL, *desc = NULL;
 	unsigned int align = 0, len;
@@ -96,7 +108,8 @@ search_array_cb(struct xbps_handle *xhp UNUSED,
 		bool *done UNUSED)
 {
 	xbps_object_t obj2;
-	struct search_data *sd = arg;
+//	struct search_data *sd = arg;
+	TSEARCH_DATA *sd = arg;
 	const char *pkgver = NULL, *desc = NULL, *str = NULL;
 
 	if (!xbps_dictionary_get_cstring_nocopy(obj, "pkgver", &pkgver))
@@ -208,7 +221,8 @@ static int
 search_repo_cb(struct xbps_repo *repo, void *arg, bool *done UNUSED)
 {
 	xbps_array_t allkeys;
-	struct search_data *sd = arg;
+//	struct search_data *sd = arg;
+	TSEARCH_DATA *sd = arg;
 	int rv;
 
 	if (repo->idx == NULL)
@@ -224,7 +238,8 @@ search_repo_cb(struct xbps_repo *repo, void *arg, bool *done UNUSED)
 int
 search(struct xbps_handle *xhp, bool repo_mode, const char *pat, const char *prop, bool regex)
 {
-	struct search_data sd;
+//	struct search_data sd;
+	TSEARCH_DATA sd;
 	int rv;
 
 	sd.regex = regex;
