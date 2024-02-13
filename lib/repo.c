@@ -23,13 +23,16 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdio.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <libgen.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
-#include <libgen.h>
-#include <fcntl.h>
+
+#include <archive.h>
+#include <archive_entry.h>
 
 #include <openssl/err.h>
 #include <openssl/sha.h>
@@ -471,22 +474,6 @@ add:
 	}
 	xbps_dbg_printf("%s: found %s\n", __func__, pkgver);
 	return pkgd;
-}
-
-xbps_dictionary_t
-xbps_repo_get_pkg_plist(struct xbps_handle *xhp, xbps_dictionary_t pkgd,
-		const char *plist)
-{
-	xbps_dictionary_t bpkgd;
-	char *url;
-
-	url = xbps_repository_pkg_path(xhp, pkgd);
-	if (url == NULL)
-		return NULL;
-
-	bpkgd = xbps_archive_fetch_plist(url, plist);
-	free(url);
-	return bpkgd;
 }
 
 static xbps_array_t

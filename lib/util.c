@@ -23,16 +23,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef HAVE_VASPRINTF
-# define _GNU_SOURCE	/* for vasprintf(3) */
-#endif
-
-#if defined(HAVE_STRLCAT) || defined(HAVE_STRLCPY)
-# define _BSD_SOURCE
-#endif
-
 #include "compat.h"
 
+#include <sys/stat.h>
 #include <sys/utsname.h>
 
 #include <ctype.h>
@@ -45,6 +38,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "xbps_api_impl.h"
 
@@ -327,6 +321,74 @@ xbps_pkgpattern_version(const char *pkg)
 	return strpbrk(pkg, "><*?[]");
 }
 
+ssize_t
+xbps_pkg_path(struct xbps_handle *xhp, char *dst, size_t dstsz, xbps_dictionary_t pkgd)
+{
+	const char *pkgver = NULL, *arch = NULL, *repoloc = NULL;
+	int l;
+
+	if (!xbps_dictionary_get_cstring_nocopy(pkgd, "pkgver", &pkgver) ||
+	    !xbps_dictionary_get_cstring_nocopy(pkgd, "architecture", &arch) ||
+	    !xbps_dictionary_get_cstring_nocopy(pkgd, "repository", &repoloc))
+		return -EINVAL;
+
+	if (xbps_repository_is_remote(repoloc))
+		repoloc = xhp->cachedir;
+
+	l = snprintf(dst, dstsz, "%s/%s.%s.xbps", repoloc, pkgver, arch);
+	if (l < 0 || (size_t)l >= dstsz)
+		return -ENOBUFS;
+
+	return l;
+}
+
+ssize_t
+xbps_pkg_url(struct xbps_handle *xhp UNUSED, char *dst, size_t dstsz, xbps_dictionary_t pkgd)
+{
+	const char *pkgver = NULL, *arch = NULL, *repoloc = NULL;
+	int l;
+
+	if (!xbps_dictionary_get_cstring_nocopy(pkgd, "pkgver", &pkgver) ||
+	    !xbps_dictionary_get_cstring_nocopy(pkgd, "architecture", &arch) ||
+	    !xbps_dictionary_get_cstring_nocopy(pkgd, "repository", &repoloc))
+		return -EINVAL;
+
+	l = snprintf(dst, dstsz, "%s/%s.%s.xbps", repoloc, pkgver, arch);
+	if (l < 0 || (size_t)l >= dstsz)
+		return -ENOBUFS;
+
+	return l;
+}
+
+ssize_t
+xbps_pkg_path_or_url(struct xbps_handle *xhp UNUSED, char *dst, size_t dstsz, xbps_dictionary_t pkgd)
+{
+	const char *pkgver = NULL, *arch = NULL, *repoloc = NULL;
+	int l;
+
+	if (!xbps_dictionary_get_cstring_nocopy(pkgd, "pkgver", &pkgver) ||
+	    !xbps_dictionary_get_cstring_nocopy(pkgd, "architecture", &arch) ||
+	    !xbps_dictionary_get_cstring_nocopy(pkgd, "repository", &repoloc))
+		return -EINVAL;
+
+	if (xbps_repository_is_remote(repoloc)) {
+		l = snprintf(dst, dstsz, "%s/%s.%s.xbps", xhp->cachedir,
+		    pkgver, arch);
+		if (l < 0 || (size_t)l >= dstsz)
+			return -ENOBUFS;
+		if (access(dst, R_OK) == 0)
+			return l;
+		if (errno != ENOENT)
+			return -errno;
+	}
+
+	l = snprintf(dst, dstsz, "%s/%s.%s.xbps", repoloc, pkgver, arch);
+	if (l < 0 || (size_t)l >= dstsz)
+		return -ENOBUFS;
+
+	return l;
+}
+
 char *
 xbps_repository_pkg_path(struct xbps_handle *xhp, xbps_dictionary_t pkg_repod)
 {
@@ -405,31 +467,17 @@ xbps_remote_binpkg_exists(struct xbps_handle *xhp, xbps_dictionary_t pkgd)
 	    "architecture", &arch))
 		return NULL;
 
-	snprintf(path, sizeof(path), "%s/%s.%s.xbps.sig", xhp->cachedir,
+	snprintf(path, sizeof(path), "%s/%s.%s.xbps.sig2", xhp->cachedir,
 	    pkgver, arch);
 
 	/* check if the signature file exists */
 	if (access(path, R_OK) != 0)
 		return false;
 
-	/* strip the .sig suffix and check if binpkg file exists */
-	path[strlen(path)-sizeof (".sig")+1] = '\0';
+	/* strip the .sig2 suffix and check if binpkg file exists */
+	path[strlen(path)-sizeof (".sig2")+1] = '\0';
 
 	return access(path, R_OK) == 0;
-}
-
-bool
-xbps_pkg_has_rundeps(xbps_dictionary_t pkgd)
-{
-	xbps_array_t array;
-
-	assert(xbps_object_type(pkgd) == XBPS_TYPE_DICTIONARY);
-
-	array = xbps_dictionary_get(pkgd, "run_depends");
-	if (xbps_array_count(array))
-		return true;
-
-	return false;
 }
 
 bool

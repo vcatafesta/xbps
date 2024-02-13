@@ -24,14 +24,16 @@
  */
 
 #include <sys/stat.h>
-#include <stdio.h>
+
+#include <assert.h>
+#include <dirent.h>
+#include <errno.h>
+#include <libgen.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
-#include <dirent.h>
-#include <libgen.h>
-#include <assert.h>
+#include <unistd.h>
 
 #include <xbps.h>
 #include "defs.h"
@@ -39,11 +41,12 @@
 static int
 remove_pkg(const char *repodir, const char *file)
 {
-	char *filepath, *sigpath;
+	char *filepath, *sigpath, *sig2path;
 	int rv = 0;
 
 	filepath = xbps_xasprintf("%s/%s", repodir, file);
 	sigpath = xbps_xasprintf("%s.sig", filepath);
+	sig2path = xbps_xasprintf("%s.sig2", filepath);
 	if (remove(filepath) == -1) {
 		if (errno != ENOENT) {
 			rv = errno;
@@ -55,10 +58,18 @@ remove_pkg(const char *repodir, const char *file)
 		if (errno != ENOENT) {
 			rv = errno;
 			xbps_error_printf("xbps-rindex: failed to remove "
-			    "package signature `%s': %s\n", sigpath, strerror(rv));
+			    "legacy package signature `%s': %s\n", sigpath, strerror(rv));
+		}
+	}
+	if (remove(sig2path) == -1) {
+		if (errno != ENOENT) {
+			rv = errno;
+			xbps_error_printf("xbps-rindex: failed to remove "
+			    "package signature `%s': %s\n", sig2path, strerror(rv));
 		}
 	}
 	free(sigpath);
+	free(sig2path);
 	free(filepath);
 
 	return rv;

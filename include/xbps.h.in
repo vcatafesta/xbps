@@ -30,6 +30,7 @@
 #define _XBPS_H_
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <inttypes.h>
 
 #include <xbps/xbps_array.h>
@@ -38,9 +39,6 @@
 #include <xbps/xbps_dictionary.h>
 #include <xbps/xbps_number.h>
 #include <xbps/xbps_string.h>
-
-#include <archive.h>
-#include <archive_entry.h>
 
 #define XBPS_MAXPATH	512
 #define XBPS_NAME_SIZE	64
@@ -842,14 +840,14 @@ xbps_array_t xbps_find_pkg_orphans(struct xbps_handle *xhp, xbps_array_t orphans
  * @param[in] xhp The pointer to the xbps_handle struct.
  * @return 0 on success, otherwise an errno value.
  */
-int xbps_pkgdb_lock(struct xbps_handle *);
+int xbps_pkgdb_lock(struct xbps_handle *xhp);
 
 /**
  * Unlocks the pkgdb after a write transaction.
  *
  * @param[in] xhp The pointer to the xbps_handle struct.
  */
-void xbps_pkgdb_unlock(struct xbps_handle *);
+void xbps_pkgdb_unlock(struct xbps_handle *xhp);
 
 /**
  * Executes a function callback per a package dictionary registered
@@ -1553,29 +1551,6 @@ xbps_array_t xbps_rpool_get_pkg_revdeps(struct xbps_handle *xhp, const char *pkg
  */
 xbps_array_t xbps_rpool_get_pkg_fulldeptree(struct xbps_handle *xhp, const char *pkg);
 
-/**
- * Iterate over the the repository pool and search for a metadata plist
- * file in a binary package matching `pattern'. If a package is matched
- * the plist file \a plistf will be internalized into a proplib dictionary.
- *
- * When \a pattern is a pkgname, the newest package available in repositories
- * will be used. Otherwise the first repository matching \a pattern.
- *
- * @param[in] xhp Pointer to the xbps_handle struct.
- * @param[in] pattern Package name or package pattern to match, i.e `foo>=1.0'.
- * @param[in] plistf Plist file name to match, i.e XBPS_PKGPROPS or XBPS_PKGFILES.
- *
- * @return An internalized proplib dictionary of \a plistf, otherwise NULL
- * and errno is set appropiately.
- *
- * @note if NULL is returned and errno is ENOENT, that means that
- * binary package file has been found but the plist file could not
- * be found.
- */
-xbps_dictionary_t xbps_rpool_get_pkg_plist(struct xbps_handle *xhp,
-					   const char *pattern,
-					   const char *plistf);
-
 /**@}*/
 
 /** @addtogroup repo */
@@ -1723,20 +1698,6 @@ xbps_dictionary_t xbps_repo_get_pkg(struct xbps_repo *repo, const char *pkg);
  * @return The pkg dictionary on success, NULL otherwise.
  */
 xbps_dictionary_t xbps_repo_get_virtualpkg(struct xbps_repo *repo, const char *pkg);
-
-/**
- * Returns a pkg dictionary of the matching \a plist file from a binary package,
- * by looking at its package dictionary (\a pkgd) returned by a repository or rpool.
- *
- * @param[in] xhp Pointer to the xbps_handle struct.
- * @param[in] pkgd Package dictionary returned by xbps_{repo,rpool}_get_xxxpkg().
- * @param[in] plist Plist filename to internalize from matching binary package.
- *
- * @return The pkg dictionary on success, NULL otherwise.
- */
-xbps_dictionary_t xbps_repo_get_pkg_plist(struct xbps_handle *xhp,
-					xbps_dictionary_t pkgd,
-					const char *plist);
 
 /**
  * Returns a proplib array of strings with reverse dependencies from
@@ -1975,8 +1936,8 @@ bool xbps_verify_signature(struct xbps_repo *repo, const char *sigfile,
  * in \a repo.
  *
  * @param[in] repo Repository to use with the RSA public key associated.
- * @param[in] fname The filename to verify, the signature file must have a .sig
- * extension, i.e `<fname>.sig`.
+ * @param[in] fname The filename to verify, the signature file must have a .sig2
+ * extension, i.e `<fname>.sig2`.
  *
  * @return True if the signature is valid, false otherwise.
  */
@@ -2037,7 +1998,7 @@ bool xbps_remote_binpkg_exists(struct xbps_handle *xhp, xbps_dictionary_t pkgd);
  */
 bool xbps_repository_is_remote(const char *uri);
 
-/*
+/**
  * Returns an allocated string with the full path to the binary package
  * matching \a pkgd.
  *
@@ -2053,6 +2014,59 @@ bool xbps_repository_is_remote(const char *uri);
  * The buffer should be free(3)d when it's no longer needed.
  */
 char *xbps_repository_pkg_path(struct xbps_handle *xhp, xbps_dictionary_t pkgd);
+
+/**
+ * Put the path to the binary package \a pkgd into \a dst.
+ *
+ * The \a pkgd dictionary must contain the following objects:
+ *  - architecture (string)
+ *  - pkgver (string)
+ *  - repository (string)
+ *
+ * @param[in] xhp Pointer to an xbps_handle struct.
+ * @param[in] dst Destination buffer.
+ * @param[in] dstsz Destination buffer size.
+ * @param[in] pkgd Package dictionary.
+ *
+ * @return The length of the path or a negative errno on error.
+ * @retval -EINVAL Missing required dictionary entry.
+ * @retval -ENOBUFS The path would exceed the supplied \a dst buffer.
+ */
+ssize_t xbps_pkg_path(struct xbps_handle *xhp, char *dst, size_t dstsz, xbps_dictionary_t pkgd);
+
+/**
+ * Put the url to the binary package \a pkgd into \a dst.
+ *
+ * The \a pkgd dictionary must contain the following objects:
+ *  - architecture (string)
+ *  - pkgver (string)
+ *  - repository (string)
+ *
+ * @param[in] xhp The pointer to an xbps_handle struct.
+ * @param[in] pkgd The package dictionary to match.
+ *
+ * @return The length of the path or a negative errno on error.
+ * @retval -EINVAL Missing required dictionary entry.
+ * @retval -ENOBUFS The path would exceed the supplied \a dst buffer.
+ */
+ssize_t xbps_pkg_url(struct xbps_handle *xhp, char *dst, size_t dstsz, xbps_dictionary_t pkgd);
+
+/**
+ * Put the url or path (if cached) to the binary package \a pkgd into \a dst.
+ *
+ * The \a pkgd dictionary must contain the following objects:
+ *  - architecture (string)
+ *  - pkgver (string)
+ *  - repository (string)
+ *
+ * @param[in] xhp The pointer to an xbps_handle struct.
+ * @param[in] pkgd The package dictionary to match.
+ *
+ * @return The length of the path or a negative errno on error.
+ * @retval -EINVAL Missing required dictionary entry.
+ * @retval -ENOBUFS The path would exceed the supplied \a dst buffer.
+ */
+ssize_t xbps_pkg_path_or_url(struct xbps_handle *xhp, char *dst, size_t dstsz, xbps_dictionary_t pkgd);
 
 /**
  * Gets the name of a package string. Package strings are composed
@@ -2154,15 +2168,6 @@ int xbps_pkgpattern_match(const char *pkgver, const char *pattern);
  * find the revision component.
  */
 const char *xbps_pkg_revision(const char *pkg);
-
-/**
- * Checks if a package has run dependencies.
- *
- * @param[in] dict Package dictionary.
- *
- * @return True if package has run dependencies, false otherwise.
- */
-bool xbps_pkg_has_rundeps(xbps_dictionary_t dict);
 
 /**
  * Returns true if provided string is valid for target architecture.
